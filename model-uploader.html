@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SMS NVR — Model Upload</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
+body{background:#0a1628;color:#fff;min-height:100vh;padding:2rem}
+h1{font-size:20px;font-weight:500;margin-bottom:8px;color:#4da6ff}
+p.sub{font-size:13px;color:#888;margin-bottom:2rem}
+.card{background:#111c2e;border:1px solid #1B4F8A;border-radius:12px;padding:1.5rem;margin-bottom:1rem}
+.drop-zone{border:2px dashed #1B4F8A;border-radius:12px;padding:3rem;text-align:center;cursor:pointer;margin-bottom:1.5rem}
+.drop-zone:hover{border-color:#4da6ff}
+.drop-zone h3{font-size:15px;margin-bottom:8px}
+.drop-zone p{font-size:13px;color:#888}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+label{font-size:13px;color:#888;display:block;margin-bottom:6px}
+input,select,textarea{width:100%;padding:8px 12px;background:#0a1628;border:1px solid #1B4F8A;border-radius:8px;color:#fff;font-size:14px}
+textarea{height:80px;resize:vertical}
+.btn{padding:10px 24px;border-radius:8px;border:none;cursor:pointer;font-size:14px}
+.btn-primary{background:#1B4F8A;color:#fff}
+.btn-primary:hover{background:#4da6ff}
+.btn-secondary{background:transparent;color:#888;border:1px solid #333}
+.actions{display:flex;gap:10px;justify-content:flex-end;margin-top:1.5rem}
+.success{background:#0d3320;border:1px solid #1a6640;border-radius:8px;padding:10px 14px;color:#4caf50;font-size:13px;margin-bottom:12px;display:none}
+.error{background:#3a0d0d;border:1px solid #661a1a;border-radius:8px;padding:10px 14px;color:#f44336;font-size:13px;margin-bottom:12px;display:none}
+.file-info{background:#0a1628;border:1px solid #1B4F8A;border-radius:8px;padding:12px;margin-bottom:1.5rem;display:none;align-items:center;gap:12px}
+.model-item{background:#0a1628;border:1px solid #1B4F8A;border-radius:8px;padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.model-item .name{font-size:14px;font-weight:500}
+.model-item .meta{font-size:12px;color:#888;margin-top:2px}
+.btn-delete{padding:4px 12px;background:transparent;border:1px solid #661a1a;color:#f44336;border-radius:6px;cursor:pointer;font-size:12px}
+.back-link{display:inline-flex;align-items:center;gap:6px;color:#4da6ff;font-size:13px;text-decoration:none;margin-bottom:1.5rem}
+.back-link:hover{color:#fff}
+</style>
+</head>
+<body>
+<a href="/" class="back-link">← Back to SMS NVR</a>
+<h1>Custom model upload</h1>
+<p class="sub">Upload a trained ONNX or TFLite model to enable custom object detection</p>
+<div class="card">
+  <div class="drop-zone" onclick="document.getElementById('file-input').click()" id="drop-zone">
+    <div style="font-size:40px;margin-bottom:12px">📦</div>
+    <h3>Drag and drop model file here</h3>
+    <p>Supports .onnx and .tflite formats</p>
+    <br>
+    <button class="btn btn-secondary" onclick="event.stopPropagation();document.getElementById('file-input').click()">Browse file</button>
+    <input type="file" id="file-input" accept=".onnx,.tflite" style="display:none" onchange="handleFile(this)">
+  </div>
+  <div class="file-info" id="file-info">
+    <span style="font-size:24px">📄</span>
+    <div style="flex:1">
+      <div id="file-name" class="name"></div>
+      <div id="file-size" class="meta"></div>
+    </div>
+    <span style="color:#4caf50;font-size:20px">✓</span>
+  </div>
+  <div class="grid">
+    <div>
+      <label>Model name</label>
+      <input type="text" id="model-name" placeholder="e.g. weapon_detector">
+    </div>
+    <div>
+      <label>Model type</label>
+      <select id="model-type">
+        <option value="yolov9">YOLOv9</option>
+        <option value="yolonas">YOLO-NAS</option>
+        <option value="ssd">SSD MobileNet</option>
+        <option value="yolo-generic">YOLO Generic</option>
+      </select>
+    </div>
+    <div>
+      <label>Detector</label>
+      <select id="detector">
+        <option value="openvino">OpenVINO (Intel GPU)</option>
+        <option value="cpu">CPU</option>
+        <option value="onnx">ONNX</option>
+      </select>
+    </div>
+    <div>
+      <label>Input size</label>
+      <select id="input-size">
+        <option value="320">320 × 320</option>
+        <option value="416">416 × 416</option>
+        <option value="640">640 × 640</option>
+      </select>
+    </div>
+  </div>
+  <div style="margin-bottom:12px">
+    <label>Detection labels <span style="color:#555">(comma separated)</span></label>
+    <input type="text" id="labels" placeholder="person, car, truck, weapon, helmet">
+  </div>
+  <div>
+    <label>Description</label>
+    <textarea id="description" placeholder="Describe what this model detects and where it will be used..."></textarea>
+  </div>
+  <div id="error-msg" class="error"></div>
+  <div id="success-msg" class="success">✓ Model uploaded successfully. Restart Frigate to apply.</div>
+  <div class="actions">
+    <button class="btn btn-secondary" onclick="resetForm()">Reset</button>
+    <button class="btn btn-primary" onclick="uploadModel()">Upload model →</button>
+  </div>
+</div>
+<div class="card">
+  <h2 style="font-size:15px;font-weight:500;margin-bottom:1rem;color:#4da6ff">Uploaded models</h2>
+  <div id="models-list">
+    <p style="font-size:13px;color:#888;text-align:center;padding:1rem 0">No models uploaded yet</p>
+  </div>
+</div>
+<script>
+let selectedFile=null;
+function handleFile(input){
+  const file=input.files[0];if(!file)return;
+  selectedFile=file;
+  const info=document.getElementById('file-info');
+  info.style.display='flex';
+  document.getElementById('file-name').textContent=file.name;
+  document.getElementById('file-size').textContent=(file.size/1024/1024).toFixed(1)+' MB';
+  if(!document.getElementById('model-name').value)
+    document.getElementById('model-name').value=file.name.replace(/\.(onnx|tflite)$/,'');
+}
+function showError(msg){
+  const el=document.getElementById('error-msg');
+  el.textContent=msg;el.style.display='block';
+  document.getElementById('success-msg').style.display='none';
+}
+function getCsrf(){
+  const name='csrf_token=';
+  const cookies=document.cookie.split(';');
+  for(let c of cookies){
+    c=c.trim();
+    if(c.startsWith(name))return c.substring(name.length);
+  }
+  const meta=document.querySelector('meta[name="csrf-token"]');
+  return meta?meta.getAttribute('content'):'';
+}
+function uploadModel(){
+  const name=document.getElementById('model-name').value.trim();
+  const labels=document.getElementById('labels').value.trim();
+  if(!selectedFile)return showError('Please select a model file first.');
+  if(!name)return showError('Model name is required.');
+  if(!labels)return showError('At least one detection label is required.');
+  document.getElementById('error-msg').style.display='none';
+  const fd=new FormData();
+  fd.append('file',selectedFile);
+  fd.append('name',name);
+  fd.append('type',document.getElementById('model-type').value);
+  fd.append('detector',document.getElementById('detector').value);
+  fd.append('width',document.getElementById('input-size').value);
+  fd.append('height',document.getElementById('input-size').value);
+  fd.append('labels',labels);
+  fd.append('description',document.getElementById('description').value.trim());
+  fetch('/api/model/upload',{method:'POST',body:fd,headers:{'X-CSRF-Token':getCsrf(),'X-Requested-With':'XMLHttpRequest'}})
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.success){document.getElementById('success-msg').style.display='block';loadModels();}
+      else showError(data.message||'Upload failed.');
+    }).catch(e=>showError('Server error: '+e.message));
+}
+function loadModels(){
+  fetch('/api/model/list').then(r=>r.json()).then(data=>{
+    const list=document.getElementById('models-list');
+    list.innerHTML='';
+    if(!data.models||data.models.length===0){
+      list.innerHTML='<p style="font-size:13px;color:#888;text-align:center;padding:1rem 0">No models uploaded yet</p>';
+      return;
+    }
+    data.models.forEach(m=>{
+      const div=document.createElement('div');
+      div.className='model-item';
+      div.innerHTML=`<span style="font-size:24px">🧠</span><div style="flex:1"><div class="name">${m.name}</div><div class="meta">${m.size_mb} MB</div></div><button class="btn-delete" onclick="deleteModel('${m.name}')">Remove</button>`;
+      list.appendChild(div);
+    });
+  }).catch(()=>{});
+}
+function deleteModel(name){
+  fetch('/api/model/'+name,{method:'DELETE'}).then(r=>r.json()).then(()=>loadModels());
+}
+function resetForm(){
+  selectedFile=null;
+  document.getElementById('file-input').value='';
+  document.getElementById('file-info').style.display='none';
+  document.getElementById('model-name').value='';
+  document.getElementById('labels').value='';
+  document.getElementById('description').value='';
+  document.getElementById('error-msg').style.display='none';
+  document.getElementById('success-msg').style.display='none';
+}
+const dz=document.getElementById('drop-zone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.style.borderColor='#4da6ff';});
+dz.addEventListener('dragleave',()=>{dz.style.borderColor='#1B4F8A';});
+dz.addEventListener('drop',e=>{
+  e.preventDefault();dz.style.borderColor='#1B4F8A';
+  const file=e.dataTransfer.files[0];
+  if(file){document.getElementById('file-input').files=e.dataTransfer.files;handleFile(document.getElementById('file-input'));}
+});
+loadModels();
+</script>
+</body>
+</html>

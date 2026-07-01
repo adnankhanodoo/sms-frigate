@@ -1082,3 +1082,147 @@ async def list_cameras_sms(request: Request):
             "status": "online" if cam_stats.get("camera_fps", 0) > 0 else "offline",
         })
     return JSONResponse(content={"success": True, "cameras": result, "total": len(result)})
+
+
+# ============================================================
+# SMS SENTINEL AI — CUSTOM MODEL UPLOAD API
+# ============================================================
+
+@router.post("/model/upload", dependencies=[Depends(require_role(["admin"]))])
+async def upload_model(request: Request):
+    """Upload custom model and auto-update config.
+    Send multipart form with:
+    - file: model file (.onnx or .tflite)
+    - name: model name
+    - type: yolov9 / yolonas / ssd
+    - width: input width (default 320)
+    - height: input height (default 320)
+    - detector: openvino / cpu / onnx
+    - labels: comma separated labels (person,car,truck)
+    - description: what this model detects
+    """
+    import shutil
+    from fastapi import UploadFile, File, Form
+
+    form = await request.form()
+    file = form.get("file")
+    name = form.get("name", "custom_model")
+    model_type = form.get("type", "yolov9")
+    width = int(form.get("width", 320))
+    height = int(form.get("height", 320))
+    detector_type = form.get("detector", "openvino")
+    labels = form.get("labels", "person,car,truck")
+    description = form.get("description", "")
+
+    if not file:
+        return JSONResponse(
+            content={"success": False, "message": "model file is required"},
+            status_code=400,
+        )
+
+    # Determine file extension
+    filename = file.filename
+    if not (filename.endswith(".onnx") or filename.endswith(".tflite")):
+        return JSONResponse(
+            content={"success": False, "message": "Only .onnx or .tflite files allowed"},
+            status_code=400,
+        )
+
+    # Save model file
+    model_dir = "/config/model_cache"
+    os.makedirs(model_dir, exist_ok=True)
+    model_path = f"{model_dir}/{filename}"
+
+    with open(model_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    # Save labelmap
+    label_list = [l.strip() for l in labels.split(",")]
+    labelmap_path = f"{model_dir}/{name}_labels.txt"
+    with open(labelmap_path, "w") as f:
+        for i, label in enumerate(label_list):
+            f.write(f"{i} {label}\n")
+
+    # Update config
+    config_data, config_file, yaml = _read_config()
+
+    # Set detector
+    if "detectors" not in config_data:
+        config_data["detectors"] = {}
+
+    if detector_type == "openvino":
+        config_data["detectors"]["ov"] = {
+            "type": "openvino",
+            "device": "AUTO",
+            "model": {
+                "model_type": model_type,
+                "path": model_path,
+                "labelmap_path": labelmap_path,
+                "width": width,
+                "height": height,
+                "input_tensor": "nchw",
+                "input_pixel_format": "bgr"
+            }
+        }
+    elif detector_type == "cpu":
+        config_data["detectors"]["cpu"] = {
+            "type": "cpu",
+            "model": {
+                "model_type": model_type,
+                "path": model_path,
+                "labelmap_path": labelmap_path,
+                "width": width,
+                "height": height
+            }
+        }
+
+    # Update global objects tracking
+    if "objects" not in config_data:
+        config_data["objects"] = {}
+    config_data["objects"]["track"] = label_list
+
+    _write_config(config_data, config_file, yaml)
+
+    return JSONResponse(
+        content={
+            "success": True,
+            "message": f"Model '{name}' uploaded and config updated. Restart Frigate to apply.",
+            "model_path": model_path,
+            "labelmap_path": labelmap_path,
+            "labels": label_list,
+            "detector": detector_type,
+            "model_type": model_type,
+            "description": description,
+        },
+        status_code=201,
+    )
+
+
+@router.get("/model/list", dependencies=[Depends(allow_any_authenticated())])
+async def list_models():
+    """List all uploaded models."""
+    import glob
+    model_dir = "/config/model_cache"
+    models = []
+    for f in glob.glob(f"{model_dir}/*.onnx") + glob.glob(f"{model_dir}/*.tflite"):
+        models.append({
+            "name": os.path.basename(f),
+            "path": f,
+            "size_mb": round(os.path.getsize(f) / 1024 / 1024, 2)
+        })
+    return JSONResponse(content={"success": True, "models": models})
+
+
+@router.delete("/model/{model_name}", dependencies=[Depends(require_role(["admin"]))])
+async def delete_model(model_name: str):
+    """Delete a model file."""
+    model_path = f"/config/model_cache/{model_name}"
+    if not os.path.exists(model_path):
+        return JSONResponse(
+            content={"success": False, "message": "Model not found"},
+            status_code=404,
+        )
+    os.remove(model_path)
+    return JSONResponse(
+        content={"success": True, "message": f"Model {model_name} deleted"}
+    )

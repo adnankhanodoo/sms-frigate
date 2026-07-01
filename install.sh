@@ -1,23 +1,21 @@
 #!/bin/bash
 echo "🚀 Installing SMS Sentinel AI — Custom Frigate NVR..."
 
-# Create directories
 mkdir -p ~/frigate-sms/config
 mkdir -p ~/frigate-sms/recordings
 
-# Create default config
 cat > ~/frigate-sms/config/config.yaml << 'CONFIG'
 mqtt:
   enabled: false
+auth:
+  enabled: true
 cameras: {}
 version: 0.17-0
 CONFIG
 
-# Stop existing frigate if running
 docker stop frigate 2>/dev/null
 docker rm frigate 2>/dev/null
 
-# Pull and run
 docker run -d \
   --name frigate \
   --restart unless-stopped \
@@ -37,5 +35,9 @@ echo "⏳ Waiting for Frigate to start..."
 sleep 20
 
 echo "✅ SMS Sentinel AI Frigate installed!"
-echo "🌐 Open browser: http://localhost:5000"
-echo "📷 Add camera: POST http://localhost:5000/api/cameras/add"
+echo "🌐 UI: http://localhost:5000"
+echo "🔐 Authenticated API: https://localhost:8971"
+echo "📷 Add camera: POST https://localhost:8971/api/cameras/add"
+echo ""
+echo "🔑 Get admin password from logs:"
+echo "   docker logs frigate 2>&1 | grep -i password"
