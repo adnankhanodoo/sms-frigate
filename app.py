@@ -947,7 +947,6 @@ async def add_camera_sms(request: Request):
     config_data["cameras"][name] = {
         "enabled": True,
         "ffmpeg": {
-            "hwaccel_args": "preset-intel-qsv-h264",
             "inputs": [
                 {"path": f"rtsp://127.0.0.1:8554/{name}_sub", "input_args": "preset-rtsp-restream", "roles": ["detect"]},
                 {"path": f"rtsp://127.0.0.1:8554/{name}", "input_args": "preset-rtsp-restream", "roles": ["record"]},
@@ -1229,4 +1228,26 @@ async def delete_model(model_name: str):
     os.remove(model_path)
     return JSONResponse(
         content={"success": True, "message": f"Model {model_name} deleted"}
+    )
+
+
+@router.put("/cameras/{camera_name}/recording", dependencies=[Depends(require_role(["admin"]))])
+async def toggle_recording_sms(camera_name: str, request: Request):
+    """Enable/disable recording for a camera."""
+    data = await request.json()
+    enabled = data.get("enabled", True)
+
+    config_data, config_file, yaml = _read_config()
+
+    if camera_name not in config_data.get("cameras", {}):
+        return JSONResponse(
+            content={"success": False, "message": f"Camera {camera_name} not found"},
+            status_code=404,
+        )
+
+    config_data["cameras"][camera_name]["record"]["enabled"] = enabled
+    _write_config(config_data, config_file, yaml)
+
+    return JSONResponse(
+        content={"success": True, "message": f"Recording {'enabled' if enabled else 'disabled'} for {camera_name}"}
     )
