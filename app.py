@@ -1078,7 +1078,11 @@ async def list_cameras_sms(request: Request):
             "enabled": cam.get("enabled", True),
             "detect_enabled": cam.get("detect", {}).get("enabled", True),
             "record_enabled": cam.get("record", {}).get("enabled", True),
-            "fps": cam_stats.get("camera_fps", 0),
+            "audio_enabled": cam.get("audio", {}).get("enabled", False),
+            "live_fps": cam_stats.get("camera_fps", 0),
+            "config_fps": cam.get("detect", {}).get("fps", 5),
+            "width": cam.get("detect", {}).get("width", 640),
+            "height": cam.get("detect", {}).get("height", 360),
             "status": "online" if cam_stats.get("camera_fps", 0) > 0 else "offline",
         })
     return JSONResponse(content={"success": True, "cameras": result, "total": len(result)})
